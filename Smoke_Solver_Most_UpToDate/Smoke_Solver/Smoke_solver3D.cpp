@@ -1628,11 +1628,12 @@ void SmokeSolver3D::formRHS(float scale,float dt)
 			float y = ((float)j+0.5)/(float)_ny;
 			if(i<_nx-d && j<_ny-d && k<_nz-d && i>d &&j>d &&k>d&&/*y<=0.7&&*/_boundary_marker(i,j,k)==0)
 			{
+				//????
 				_wxstr(i,j,k) = scale * (_wxnp1(i,j,k) - _wxn(i,j,k));
 				_wystr(i,j,k) = scale * (_wynp1(i,j,k) - _wyn(i,j,k));
 				_wzstr(i,j,k) = scale * (_wznp1(i,j,k) - _wzn(i,j,k));
 			}
-			else
+			else//zeroing out dw within a few grid cells of the boundary for stability
 			{
 				_wxstr(i,j,k) = 0;
 				_wystr(i,j,k) = 0;
@@ -2027,12 +2028,12 @@ void SmokeSolver3D::BFECC_IVOCK( float dt )
 	vort_confine_y.setZero();
 	vort_confine_z.setZero();
 
-	compute_curl();
-	vorticity_confinement(dt*_vort_confine_coef);
+	compute_curl();//w
+	vorticity_confinement(dt*_vort_confine_coef);//Fconf
 
 	BFECC_field(dt,_un,_unp1,_utemp);
 	BFECC_field(dt,_vn,_vnp1,_vtemp);
-	BFECC_field(dt,_wn,_wnp1,_wtemp);
+	BFECC_field(dt,_wn,_wnp1,_wtemp);//advect u
 	clampExtrema(dt,_un,_unp1);
 	clampExtrema(dt,_vn,_vnp1);
 	clampExtrema(dt,_wn,_wnp1);
@@ -2043,13 +2044,13 @@ void SmokeSolver3D::BFECC_IVOCK( float dt )
 	_wxn.setZero();
 	_wyn.setZero();
 	_wzn.setZero();
-	getDivergence();
+	getDivergence();//divergence
 	decay_vortices(dt, _wxstr, _wystr, _wzstr);
 
 
 	BFECC_field(dt,_wxstr,_wxnp1,_wxn);
 	BFECC_field(dt,_wystr,_wynp1,_wyn);
-	BFECC_field(dt,_wzstr,_wznp1,_wzn);
+	BFECC_field(dt,_wzstr,_wznp1,_wzn);//advect w, gets w'in _w_n
 
 
 	clampExtrema(dt, _wxstr,_wxnp1);
@@ -2084,9 +2085,10 @@ void SmokeSolver3D::BFECC_IVOCK( float dt )
 	_wxn.setZero();
 	_wyn.setZero();
 	_wzn.setZero();
-	compute_curl();
+	compute_curl();//gets w* in _w_n
 
-
+	
+	//what is sacle for??
 	_Psix.setZero();
 	_Psiy.setZero();
 	_Psiz.setZero();
@@ -2117,19 +2119,18 @@ void SmokeSolver3D::BFECC_IVOCK( float dt )
 
 
 
-
-	_ppe_solver.m_applyOpenBoundaryCondition(&_Psix,&_wxstr,_hx);
-	solve_stream_Poisson(_Psix,_wxstr);
+	//solves ¦·(_Psixyz) from steam Poisson function ¨Œ^2 ¦· = -(d?)w 
+	_ppe_solver.m_applyOpenBoundaryCondition(&_Psix,&_wxstr,_hx);		
+	solve_stream_Poisson(_Psix,_wxstr);									//-_wxstr as b
 	_ppe_solver.m_applyOpenBoundaryCondition(&_Psiy,&_wystr,_hx);
 	solve_stream_Poisson(_Psiy,_wystr);
 	_ppe_solver.m_applyOpenBoundaryCondition(&_Psiz,&_wzstr,_hx);
 	solve_stream_Poisson(_Psiz,_wzstr);
 
 
-
-
-
+	//u += ¨Œ x ¦·
 	addCurlPsi();
+	// adds Fconf to velocity
 	add_vort_confinement(_un, vort_confine_x);
 	add_vort_confinement(_vn, vort_confine_y);
 	add_vort_confinement(_wn, vort_confine_z);
